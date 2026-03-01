@@ -50,6 +50,7 @@ async def rerank_documents(request: RerankRequest):
         # Prepare the payload for LiteLLM
         payload = {
             #"model": request.model,
+            "model": RERANKER_MODEL,  # Use the model specified in environment variable
             "query": request.query,
             "documents": request.documents,
         }
