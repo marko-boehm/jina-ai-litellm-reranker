@@ -49,7 +49,7 @@ async def rerank_documents(request: RerankRequest):
     try:
         # Prepare the payload for LiteLLM
         payload = {
-            "model": request.model,
+            #"model": request.model,
             "query": request.query,
             "documents": request.documents,
         }
