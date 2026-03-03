@@ -60,13 +60,11 @@ The application can be configured using the following environment variables:
 | Variable | Description | Default Value |
 |----------|-------------|---------------|
 | `RERANKER_MODEL` | The model name to use for reranking | `rerank-english-v3.0` |
-| `LITELLM_API_KEY` | API key for authenticating with LiteLLM | `sk-1234` |
 | `LITELLM_BASE_URL` | Base URL of the LiteLLM service | `http://0.0.0.0:4000` |
 
 Create a `.env` file in the project root with your configuration:
 ```env
 RERANKER_MODEL=rerank-english-v3.0
-LITELLM_API_KEY=your-litellm-api-key
 LITELLM_BASE_URL=http://your-litellm-service:4000
 ```
 
