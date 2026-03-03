@@ -1,7 +1,7 @@
 import os
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Any, Union, Optional
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Header
 from pydantic import BaseModel
 import httpx
 import json
@@ -18,7 +18,6 @@ app = FastAPI(
 
 # Load configuration from environment variables
 RERANKER_MODEL = os.getenv("RERANKER_MODEL", "rerank-english-v3.0")
-LITELLM_API_KEY = os.getenv("LITELLM_API_KEY", "sk-1234")
 LITELLM_BASE_URL = os.getenv("LITELLM_BASE_URL", "http://0.0.0.0:4000")
 
 # Create an HTTP client for making requests
@@ -39,22 +38,46 @@ class RerankResult(BaseModel):
 class RerankResponse(BaseModel):
     results: List[RerankResult]
 
+# Dependency to check for valid Authorization header
+def verify_api_key(authorization: str = Header(...)):
+    if not authorization:
+        raise HTTPException(
+            status_code=401,
+            detail="Authorization header is missing. Format: 'Bearer YOUR_API_KEY'",
+        )
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid Authorization header format. Expected: 'Bearer YOUR_API_KEY'",
+        )
+    api_key = authorization[len("Bearer "):]
+    if not api_key:
+        raise HTTPException(
+            status_code=401,
+            detail="API key is missing",
+        )
+    return api_key
+
 @app.post("/rerank", response_model=RerankResponse)
-async def rerank_documents(request: RerankRequest):
+async def rerank_documents(
+    request: RerankRequest,
+    api_key: str = Depends(verify_api_key)
+):
     """
     Rerank documents based on their relevance to a query.
-    
+
     Compatible with Jina AI Reranker API specification.
+    Requires Authorization header with Bearer token.
     """
     try:
         # Prepare the payload for LiteLLM
         payload = {
-            #"model": request.model,
+            # "model": request.model,
             "model": RERANKER_MODEL,  # Use the model specified in environment variable
             "query": request.query,
             "documents": request.documents,
         }
-        
+
         # Add top_n if provided
         if request.top_n is not None:
             payload["top_n"] = request.top_n
@@ -62,7 +85,7 @@ async def rerank_documents(request: RerankRequest):
         # Set up headers for authentication
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {LITELLM_API_KEY}",
+            "Authorization": f"Bearer {api_key}",
         }
 
         # Call the LiteLLM rerank endpoint
@@ -71,13 +94,13 @@ async def rerank_documents(request: RerankRequest):
             json=payload,
             headers=headers,
         )
-        
+
         # Raise an HTTP error if the call was not successful
         response.raise_for_status()
 
         # Parse the JSON response from LiteLLM
         result = response.json()
-        
+
         # Map the response to Jina AI rerank API response format
         results = []
         for i, item in enumerate(result.get("results", [])):
@@ -86,15 +109,15 @@ async def rerank_documents(request: RerankRequest):
                 index=item.get("index", i),
                 relevance_score=item.get("relevance_score", 0.0)
             )
-            
+
             # Add document only if return_documents is True
             if request.return_documents:
                 rerank_result.document = {"text": request.documents[item.get("index", i)]}
-                
+
             results.append(rerank_result)
-            
+
         return RerankResponse(results=results)
-        
+
     except httpx.HTTPStatusError as e:
         # Propagate errors coming from the rerank service
         raise HTTPException(
@@ -120,3 +143,4 @@ async def close_http_client():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
