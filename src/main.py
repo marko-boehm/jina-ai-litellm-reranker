@@ -39,7 +39,11 @@ class RerankResult(BaseModel):
     relevance_score: float
     document: Dict[str, Any] = None
 
+# Updated response model to match the new format
 class RerankResponse(BaseModel):
+    model: str
+    object: str
+    usage: Dict[str, int]
     results: List[RerankResult]
 
 @app.post("/rerank", response_model=RerankResponse)
@@ -88,7 +92,10 @@ async def rerank_documents(
         # Parse the JSON response from LiteLLM
         result = response.json()
 
-        # Map the response to Jina AI rerank API response format
+        # Extract total tokens from the response
+        total_tokens = result.get("meta", {}).get("billed_units", {}).get("total_tokens", 0)
+
+       # Map the response to Jina AI rerank API response format
         results = []
         for i, item in enumerate(result.get("results", [])):
             # Create the base result object
@@ -103,7 +110,13 @@ async def rerank_documents(
 
             results.append(rerank_result)
 
-        return RerankResponse(results=results)
+        # Return response in the new format
+        return RerankResponse(
+            model=RERANKER_MODEL,
+            object="list",
+            usage={"total_tokens": total_tokens},
+            results=results
+        )
 
     except httpx.HTTPStatusError as e:
         # Propagate errors coming from the rerank service
