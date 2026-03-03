@@ -1,7 +1,8 @@
 import os
 from typing import List, Dict, Any, Union, Optional
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import httpx
 import json
@@ -19,6 +20,9 @@ app = FastAPI(
 # Load configuration from environment variables
 RERANKER_MODEL = os.getenv("RERANKER_MODEL", "rerank-english-v3.0")
 LITELLM_BASE_URL = os.getenv("LITELLM_BASE_URL", "http://0.0.0.0:4000")
+
+# Security scheme
+security = HTTPBearer()
 
 # Create an HTTP client for making requests
 http_client = httpx.AsyncClient()
@@ -38,30 +42,10 @@ class RerankResult(BaseModel):
 class RerankResponse(BaseModel):
     results: List[RerankResult]
 
-# Dependency to check for valid Authorization header
-def verify_api_key(authorization: str = Header(...)):
-    if not authorization:
-        raise HTTPException(
-            status_code=401,
-            detail="Authorization header is missing. Format: 'Bearer YOUR_API_KEY'",
-        )
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid Authorization header format. Expected: 'Bearer YOUR_API_KEY'",
-        )
-    api_key = authorization[len("Bearer "):]
-    if not api_key:
-        raise HTTPException(
-            status_code=401,
-            detail="API key is missing",
-        )
-    return api_key
-
 @app.post("/rerank", response_model=RerankResponse)
 async def rerank_documents(
     request: RerankRequest,
-    api_key: str = Depends(verify_api_key)
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Rerank documents based on their relevance to a query.
@@ -70,6 +54,9 @@ async def rerank_documents(
     Requires Authorization header with Bearer token.
     """
     try:
+        # Extract API key from credentials
+        api_key = credentials.credentials
+        
         # Prepare the payload for LiteLLM
         payload = {
             # "model": request.model,
@@ -143,4 +130,3 @@ async def close_http_client():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
